@@ -20,7 +20,8 @@ light_t lights[2] = {
 const int LIGHTUP_TIME = 20; // seconds
 const int PIR_PIN = 12;      // PIR sensor pin
 const int BTN_PIN = 13;      // button pin
-const int PIR_SWITCH_PIN = 14;   // switch pin
+const int SWITCH_PIN = 14;   // switch pin
+const int PIR_SWITCH_PIN = 15;   // PIR disable switch pin
 
 // --------------
 
@@ -335,12 +336,30 @@ void motion_detected_interrupt()
     }
 }
 
+void btn_interrupt()
+{
+    //TODO: same as motion_detected_interrupt() but without night check
+}
+
+void switch_interrupt()
+{
+    if (digitalRead(SWITCH_PIN) == LOW)
+    {
+        Serial.println("Switching lights ON");
+        switch_lights(); // TODO: ON
+    } else if (digitalRead(SWITCH_PIN) == HIGH) {
+        Serial.println("Switching lights OFF");
+        switch_lights(); // TODO: OFF
+    }
+}
+
 void setup()
 {
     Serial.begin(115200);
     pinMode(PIR_PIN, INPUT); // TODO: pullup or pulldown?
     pinMode(BTN_PIN, INPUT_PULLUP);
     pinMode(LED_BUILTIN, OUTPUT);
+    pinMode(SWITCH_PIN, INPUT_PULLUP);
     pinMode(PIR_SWITCH_PIN, INPUT_PULLUP);
     wifi_setup();
 
@@ -348,7 +367,8 @@ void setup()
     timeClient.begin();
 
     attachInterrupt(digitalPinToInterrupt(PIR_PIN), motion_detected_interrupt, CHANGE); // TODO: rising or falling?
-    attachInterrupt(digitalPinToInterrupt(BTN_PIN), motion_detected_interrupt, FALLING);
+    attachInterrupt(digitalPinToInterrupt(BTN_PIN), btn_interrupt, FALLING);
+    attachInterrupt(digitalPinToInterrupt(SWITCH_PIN), switch_interrupt, CHANGE);
 }
 
 void loop()
