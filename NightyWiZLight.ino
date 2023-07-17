@@ -20,7 +20,7 @@ light_t lights[2] = {
 const int LIGHTUP_TIME = 20; // seconds
 const int PIR_PIN = 12;      // PIR sensor pin
 const int BTN_PIN = 13;      // button pin
-const int SWITCH_PIN = 14;   // switch pin
+const int PIR_SWITCH_PIN = 14;   // switch pin
 
 // --------------
 
@@ -321,7 +321,7 @@ day_time_t check_night_time()
 
 void motion_detected_interrupt()
 {
-    if (!swiching_lights || !(digitalRead(SWITCH_PIN) == LOW))
+    if (!swiching_lights || !(digitalRead(PIR_SWITCH_PIN) == LOW))
         timeClient.update();
     // prevents the lights from switching again if PIR interrupt during the delay, or if the switch is on
     {
@@ -341,7 +341,7 @@ void setup()
     pinMode(PIR_PIN, INPUT); // TODO: pullup or pulldown?
     pinMode(BTN_PIN, INPUT_PULLUP);
     pinMode(LED_BUILTIN, OUTPUT);
-    pinMode(SWITCH_PIN, INPUT_PULLUP);
+    pinMode(PIR_SWITCH_PIN, INPUT_PULLUP);
     wifi_setup();
 
     Udp.begin(LOCAL_UDP_PORT);
