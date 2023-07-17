@@ -1,7 +1,7 @@
 // ---- Secrets ----
 #ifndef UTILS_h
 #define UTILS_h
-#include <NTPClient.h>
+#include <time.h>
 
 typedef enum
 {
@@ -20,8 +20,8 @@ typedef struct
     int id;
     light_state_t state = OFF;
     bool changed_state = false;
-    int port = 38899;
-    char *ip_addr[15];
+    unsigned int port = 38899;
+    char ip_addr[15];
 } light_t;
 
 
