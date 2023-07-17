@@ -3,17 +3,15 @@
 #include "SECRETS.h"
 #include "UTILS.h"
 
-#include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>
-// #include <HTTPClient.h>
-// #include <WifiClient.h>
-#include <WiFiUdp.h>
-// #include <Time>
-#include <NTPClient.h>
-#include <time.h>
-// #include <TimeLib.h>
-#include <ArduinoJson.h>
-// #include <Arduino_JSON.h> //TODO: use ArduinoJson only (modify only OWM GET)
+// #include <HTTPClient.h>     // use ESP8266HTTPClient.h instead
+// #include <WifiClient.h>     // use ESP8266WiFi.h instead
+// #include <TimeLib.h>        // not used ?
+#include <ESP8266WiFi.h>       // ESP8266 Wifi
+#include <ESP8266HTTPClient.h> // HTTP client
+#include <WiFiUdp.h>           // UDP communication to WiZ lights
+#include <NTPClient.h>         // get time from NTP server
+#include <time.h>              // for time_t
+#include <ArduinoJson.h>       // for parsing OpenWeatherMap API response
 
 light_t lights[2] = {
     {0, OFF, 38899, false, "192.168.0.50"}, // light 0, init state, UDP port, changed_state(leave false), ip address
@@ -37,10 +35,11 @@ const char OWM_URL[] = "https://api.openweathermap.org/data/2.5/weather?units=me
 bool swiching_lights = false;
 
 WiFiClient client;
-// HTTPClient http;
+// HTTPClient http; // set only when using OWM
 WiFiUDP Udp;
 // WiFiUDP ntpUDP; //? needed?
 NTPClient timeClient(Udp, "pool.ntp.org");
+// NTPClient timeClient(ntpUDP, "pool.ntp.org"); //? needed?
 
 #if USE_OPENWEATHERMAP || defined(OWM_API_KEY)
 HTTPClient http;
@@ -97,7 +96,7 @@ void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
     filter["sys"] = true;
     // StaticJsonDocument<1169> jsonBuffer;
     // JsonObject &data = jsonBuffer.parseObject(json_buffer);
-    //deserializeJson(data, json_buffer);
+    // deserializeJson(data, json_buffer);
     deserializeJson(data, json_buffer, DeserializationOption::Filter(filter));
     Serial.println("JSON dta:");
     Serial.println(data);
