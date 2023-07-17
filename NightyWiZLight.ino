@@ -12,7 +12,8 @@
 #include <NTPClient.h>
 #include <time.h>
 //#include <TimeLib.h>
-#include <Arduino_JSON.h>
+#include <ArduinoJson.h> // <ArduinoJson> or <Arduino_JSON> ?
+#include <Arduino_JSON.h> //TODO: use ArduinoJson only (modify only OWM GET)
 
 light_t lights[2] = {
     {0, OFF, 38899, false, "192.168.0.50"}, // light 0, init state, UDP port, changed_state(leave false), ip address
@@ -20,7 +21,8 @@ light_t lights[2] = {
 };
 const int LIGHTUP_TIME = 20; // seconds
 const int PIR_PIN = 12;      // PIR sensor pin
-const int SWITCH_PIN = 13;   // switch pin
+const int BTN_PIN = 13;      // button pin
+const int SWITCH_PIN = 14;   // switch pin
 
 // --------------
 
@@ -114,7 +116,9 @@ light_state_t get_light_state(light_t &light)
     light_state_t current_state = OFF;
     packet_flush();
 
-    const IPAddress ip_address = IPAddress::fromString4(light.ip_addr);
+    IPAddress ip_address;
+    ip_address.fromString(light.ip_addr);
+
     Udp.beginPacket(ip_address, light.port);
     Udp.write(GET_BUFFER);
         Udp.endPacket();
@@ -158,7 +162,8 @@ bool switch_light_state(light_t &light, light_state_t new_state)
 {
     WiFiUDP Udp;
     bool res = false;
-    const IPAddress ip_address = IPAddress(...) //TODO:
+    IPAddress ip_address;
+    ip_address.fromString(light.ip_addr);
     Udp.beginPacket(ip_address, light.port);
     if (new_state == ON)
     {
@@ -280,6 +285,7 @@ day_time_t check_night_time()
 void motion_detected_interrupt()
 {
     if (!swiching_lights || !(digitalRead(SWITCH_PIN) == LOW))
+    timeClient.update();
     // prevents the lights from switching again if PIR interrupt during the delay, or if the switch is on
     {
         day_time_t current_time = check_night_time();
@@ -295,7 +301,8 @@ void motion_detected_interrupt()
 void setup()
 {
     Serial.begin(115200);
-    pinMode(PIR_PIN, INPUT);
+    pinMode(PIR_PIN, INPUT); //TODO: pullup or pulldown?
+    pinMode(BTN_PIN, INPUT_PULLUP);
     pinMode(LED_BUILTIN, OUTPUT);
     pinMode(SWITCH_PIN, INPUT_PULLUP);
     wifi_setup();
@@ -303,13 +310,14 @@ void setup()
     Udp.begin(LOCAL_UDP_PORT);
     timeClient.begin();
 
-    // TODO:
-    attachInterrupt(digitalPinToInterrupt(PIR_PIN), motion_detected_interrupt, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(PIR_PIN), motion_detected_interrupt, CHANGE); //TODO: rise or fall?
+    attachInterrupt(digitalPinToInterrupt(BTN_PIN), motion_detected_interrupt, FALL);
 }
 
 void loop()
 {
-    // TODO:
+    // sould never get here
     timeClient.update();
     delay(2000);
+    Serial.println("Looping...");
 }
