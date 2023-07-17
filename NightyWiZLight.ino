@@ -11,9 +11,9 @@
 // #include <Time>
 #include <NTPClient.h>
 #include <time.h>
-//#include <TimeLib.h>
-#include <ArduinoJson.h> // <ArduinoJson> or <Arduino_JSON> ?
-#include <Arduino_JSON.h> //TODO: use ArduinoJson only (modify only OWM GET)
+// #include <TimeLib.h>
+#include <ArduinoJson.h>
+// #include <Arduino_JSON.h> //TODO: use ArduinoJson only (modify only OWM GET)
 
 light_t lights[2] = {
     {0, OFF, 38899, false, "192.168.0.50"}, // light 0, init state, UDP port, changed_state(leave false), ip address
@@ -88,6 +88,36 @@ void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
         Serial.println("[HTTP] Unable to connect");
         return;
     }
+    // capacity of OpenWeatherMap API response from ArduinoJson Assistant
+    const size_t capacity = JSON_ARRAY_SIZE(3) + 2 * JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(2) + 3 * JSON_OBJECT_SIZE(4) + JSON_OBJECT_SIZE(5) + JSON_OBJECT_SIZE(6) + JSON_OBJECT_SIZE(12) + 480;
+    DynamicJsonDocument data(capacity);
+    StaticJsonDocument<64> filter;
+    Serial.print("JSON filter: ");
+    Serial.println(filter);
+    filter["sys"] = true;
+    // StaticJsonDocument<1169> jsonBuffer;
+    // JsonObject &data = jsonBuffer.parseObject(json_buffer);
+    //deserializeJson(data, json_buffer);
+    deserializeJson(data, json_buffer, DeserializationOption::Filter(filter));
+    Serial.println("JSON dta:");
+    Serial.println(data);
+    if (!data.containsKey("sunrise") || !data.containsKey("sunset"))
+    {
+        Serial.println("Parsing JSON input failed! No sunrise or sunset data");
+        return;
+    }
+    else
+    {
+        Serial.println("Deserializing JSON doc successful");
+    }
+    /*
+    if (!data.success())
+    {
+        Serial.println("Parsing JSON input failed!");
+        return;
+    }
+    */
+    /*
     JSONVar data = JSON.parse(json_buffer);
     if (JSON.typeof(data) == "undefined")
     {
@@ -97,6 +127,11 @@ void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
     sunrise = (unsigned long) data["sys"]["sunrise"];
     Serial.println("Sunrise time: " + String(sunrise));
     sunset = (unsigned long) data["sys"]["sunset"];
+    Serial.println("Sunset time: " + String(sunset));
+    */
+    sunrise = (unsigned long)data["sys"]["sunrise"]; // long?
+    Serial.println("Sunrise time: " + String(sunrise));
+    sunset = (unsigned long)data["sys"]["sunset"]; // long?
     Serial.println("Sunset time: " + String(sunset));
 }
 
@@ -121,7 +156,7 @@ light_state_t get_light_state(light_t &light)
 
     Udp.beginPacket(ip_address, light.port);
     Udp.write(GET_BUFFER);
-        Udp.endPacket();
+    Udp.endPacket();
 
     int packet_size = Udp.parsePacket();
     int timeout = 50;
@@ -229,7 +264,10 @@ bool switch_lights()
 
         light.changed_state = current_state == OFF ? true : false;
         Serial.println("Switching light " + String(light.id) + " state to ON");
-        if (!light.changed_state) {Serial.println("(light was already ON)");}
+        if (!light.changed_state)
+        {
+            Serial.println("(light was already ON)");
+        }
         res = switch_light_state(light, ON);
         /*
         if (current_state == OFF)
@@ -265,7 +303,7 @@ bool switch_lights()
 day_time_t check_night_time()
 {
     time_t now = timeClient.getEpochTime();
-    Serial.println("Now time: " + (unsigned long) now);
+    Serial.println("Now time: " + (unsigned long)now);
     time_t sunrise;
     time_t sunset;
     get_sunset_sunrise_time(sunrise, sunset, now);
@@ -285,7 +323,7 @@ day_time_t check_night_time()
 void motion_detected_interrupt()
 {
     if (!swiching_lights || !(digitalRead(SWITCH_PIN) == LOW))
-    timeClient.update();
+        timeClient.update();
     // prevents the lights from switching again if PIR interrupt during the delay, or if the switch is on
     {
         day_time_t current_time = check_night_time();
@@ -301,7 +339,7 @@ void motion_detected_interrupt()
 void setup()
 {
     Serial.begin(115200);
-    pinMode(PIR_PIN, INPUT); //TODO: pullup or pulldown?
+    pinMode(PIR_PIN, INPUT); // TODO: pullup or pulldown?
     pinMode(BTN_PIN, INPUT_PULLUP);
     pinMode(LED_BUILTIN, OUTPUT);
     pinMode(SWITCH_PIN, INPUT_PULLUP);
@@ -310,13 +348,13 @@ void setup()
     Udp.begin(LOCAL_UDP_PORT);
     timeClient.begin();
 
-    attachInterrupt(digitalPinToInterrupt(PIR_PIN), motion_detected_interrupt, CHANGE); //TODO: rise or fall?
-    attachInterrupt(digitalPinToInterrupt(BTN_PIN), motion_detected_interrupt, FALL);
+    attachInterrupt(digitalPinToInterrupt(PIR_PIN), motion_detected_interrupt, CHANGE); // TODO: rising or falling?
+    attachInterrupt(digitalPinToInterrupt(BTN_PIN), motion_detected_interrupt, FALLING);
 }
 
 void loop()
 {
-    // sould never get here
+    // sould never get here?
     timeClient.update();
     delay(2000);
     Serial.println("Looping...");
