@@ -7,9 +7,12 @@
 #include <ESP8266HTTPClient.h>
 // #include <HTTPClient.h>
 // #include <WifiClient.h>
-// #include <WiFiUdp.h>
+#include <WiFiUdp.h>
 // #include <Time>
 #include <NTPClient.h>
+#include <time.h>
+//#include <TimeLib.h>
+#include <Arduino_JSON.h>
 
 light_t lights[2] = {
     {0, OFF, 38899, false, "192.168.0.50"}, // light 0, init state, UDP port, changed_state(leave false), ip address
@@ -33,17 +36,23 @@ bool swiching_lights = false;
 
 WiFiClient client;
 // HTTPClient http;
-WifiUDP Udp;
+WiFiUDP Udp;
 // WiFiUDP ntpUDP; //? needed?
 NTPClient timeClient(Udp, "pool.ntp.org");
 
 #if USE_OPENWEATHERMAP || defined(OWM_API_KEY)
-#include <Arduino_JSON>
 HTTPClient http;
-void get_sunset_sunrise_time(time_t *sunrise, time_t *sunset)
+void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
 {
     String json_buffer;
-    String server_path = OWM_URL + "&lat=" + LATITUDE + "&lon=" + LONGITUDE + "&appid=" + OWM_API_KEY;
+    String server_path;
+    server_path = OWM_URL;
+    server_path += "&lat=";
+    server_path += LATITUDE;
+    server_path += "&lon=";
+    server_path += LONGITUDE;
+    server_path += "&appid=";
+    server_path += OWM_API_KEY;
 
     Serial.print("[HTTP] begin...\n");
     if (http.begin(client, server_path.c_str()))
@@ -57,7 +66,7 @@ void get_sunset_sunrise_time(time_t *sunrise, time_t *sunset)
         {
             Serial.printf("[HTTP] GET... code: %d\n", http_response_code);
 
-            if (http_response_code == HTTP_CODE_OK || http_reponse_code == HTTP_CODE_MOVED_PERMANENTLY)
+            if (http_response_code == HTTP_CODE_OK || http_response_code == HTTP_CODE_MOVED_PERMANENTLY)
             {
                 payload = http.getString();
                 Serial.println(payload);
@@ -75,35 +84,39 @@ void get_sunset_sunrise_time(time_t *sunrise, time_t *sunset)
     else
     {
         Serial.println("[HTTP] Unable to connect");
-        return {1, 1};
+        return;
     }
     JSONVar data = JSON.parse(json_buffer);
     if (JSON.typeof(data) == "undefined")
     {
         Serial.println("Parsing JSON input failed!");
-        return {1, 1};
+        return;
     }
-    sunrise = data["sys"]["sunrise"];
-    Serial.println("Sunrise time: %u"; sunrise);
-    sunset = data["sys"]["sunset"];
-    Serial.println("Sunset time: %u"; sunset);
+    sunrise = (unsigned long) data["sys"]["sunrise"];
+    Serial.println("Sunrise time: " + String(sunrise));
+    sunset = (unsigned long) data["sys"]["sunset"];
+    Serial.println("Sunset time: " + String(sunset));
 }
 
 #else
 #include <SolarCalculator>
-sunrise_sunset_time_t get_sunset_sunrise_time()
+void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
 {
     // TODO:
+    double latitude = LATITUDE.toDouble();
+    double longitude = LONGITUDE.toDouble();
+    calcSunriseSunset(now, latitude, longitude, transit, &sunrise, &sunset);
 }
 #endif
 
-light_state_t get_light_state(light_t light)
+light_state_t get_light_state(light_t &light)
 {
     light_state_t current_state = OFF;
     packet_flush();
 
-    Udp.beginPacket(&light.ip_addr, &light.port);
-    Udp.write(GET_BUFFER)
+    const IPAddress ip_address = IPAddress::fromString4(light.ip_addr);
+    Udp.beginPacket(ip_address, light.port);
+    Udp.write(GET_BUFFER);
         Udp.endPacket();
 
     int packet_size = Udp.parsePacket();
@@ -116,7 +129,7 @@ light_state_t get_light_state(light_t light)
     }
     if (timeout == 0)
     {
-        Serial.println("Light get state timed out: %s", light.ip_addr);
+        Serial.println("Light get state timed out: " + String(light.ip_addr));
         return OFF;
     }
     if (packet_size)
@@ -124,10 +137,10 @@ light_state_t get_light_state(light_t light)
         int len = Udp.read(packet_buffer, UDP_TX_PACKET_MAX_SIZE); // 255
         if (len < 0)
         {
-            packer_buffer[len] = 0;
+            packet_buffer[len] = 0;
         }
         Serial.println("Packet received:");
-        Serial.println(packer_buffer);
+        Serial.println(packet_buffer);
 
         const int capacity = JSON_OBJECT_SIZE(3) + JSON_OBJECT_SIZE(7);
         StaticJsonDocument<capacity> response;
@@ -141,11 +154,12 @@ light_state_t get_light_state(light_t light)
     return current_state;
 }
 
-bool switch_light_state(light_t light, light_state_t new_state)
+bool switch_light_state(light_t &light, light_state_t new_state)
 {
     WiFiUDP Udp;
     bool res = false;
-    Udp.beginPacket(&light.ip_addr, &light.port);
+    const IPAddress ip_address = IPAddress(...) //TODO:
+    Udp.beginPacket(ip_address, light.port);
     if (new_state == ON)
     {
         Udp.write(ON_BUFFER);
@@ -202,14 +216,15 @@ bool wifi_setup()
 bool switch_lights()
 {
     bool res = false;
-    for (int i, i < sizeof(lights) / sizeof(lights[0]), i++)
+
+    for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
     {
         light_t light = lights[i];
         light_state_t current_state = get_light_state(light);
 
         light.changed_state = current_state == OFF ? true : false;
-        Serial.println("Switching light %d state to ON", light.id);
-        !light.changed_state ? Serial.println("(light was already ON)");
+        Serial.println("Switching light " + String(light.id) + " state to ON");
+        if (!light.changed_state) {Serial.println("(light was already ON)");}
         res = switch_light_state(light, ON);
         /*
         if (current_state == OFF)
@@ -229,12 +244,12 @@ bool switch_lights()
 
     delay(LIGHTUP_TIME * 1000);
 
-    for (int i, i < sizeof(lights) / sizeof(lights[0]), i++)
+    for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
     {
         light_t light = lights[i];
         if (light.changed_state)
         {
-            Serial.println("Switching light %d state back to OFF", light.id);
+            Serial.println("Switching light " + String(light.id) + " state back to OFF");
             res = switch_light_state(light, OFF);
         }
     }
@@ -245,10 +260,10 @@ bool switch_lights()
 day_time_t check_night_time()
 {
     time_t now = timeClient.getEpochTime();
-    Serial.println("Now time: %u", now);
+    Serial.println("Now time: " + (unsigned long) now);
     time_t sunrise;
     time_t sunset;
-    get_sunset_sunrise_time(&sunrise, &sunset);
+    get_sunset_sunrise_time(sunrise, sunset, now);
 
     if (now > sunrise && now < sunset)
     {
