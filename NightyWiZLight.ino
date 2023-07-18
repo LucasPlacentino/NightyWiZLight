@@ -46,7 +46,7 @@ NTPClient timeClient(Udp, "pool.ntp.org");
 HTTPClient http;
 void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
 {
-    String json_buffer;
+    //String json_buffer;
     String server_path;
     server_path = OWM_URL;
     server_path += "&lat=";
@@ -56,13 +56,17 @@ void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
     server_path += "&appid=";
     server_path += OWM_API_KEY;
 
-    Serial.print("[HTTP] begin...\n");
+    Serial.print(F("[HTTP] begin...\n"));
+    
+    http.useHTTP10(true); // force HTTP/1.0, not 1.1, to be able to get http stream
+    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS); // not necessary ?
+
     if (http.begin(client, server_path.c_str()))
     { // HTTP
 
-        Serial.print("[HTTP] GET...\n");
+        Serial.print(F("[HTTP] GET...\n"));
         int http_response_code = http.GET();
-        String payload = "{}";
+        //String payload = "{}";
 
         if (http_response_code > 0)
         {
@@ -70,8 +74,47 @@ void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
 
             if (http_response_code == HTTP_CODE_OK || http_response_code == HTTP_CODE_MOVED_PERMANENTLY)
             {
-                payload = http.getString();
-                Serial.println(payload);
+                // payload = http.getString();
+                // Serial.println(payload);
+
+                //const size_t capacity = JSON_ARRAY_SIZE(3) + 2 * JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(2) + 3 * JSON_OBJECT_SIZE(4) + JSON_OBJECT_SIZE(5) + JSON_OBJECT_SIZE(6) + JSON_OBJECT_SIZE(12) + 480;
+                //DynamicJsonDocument data(capacity);
+                DynamicJsonDocument data(96); // from https://arduinojson.org/v6/assistant/
+                //StaticJsonDocument<64> filter;
+                //filter["sys"] = true;
+                StaticJsonDocument<48> filter; // from https://arduinojson.org/v6/assistant/
+                JsonObject filter_sys = filter.createNestedObject("sys");
+                filter_sys["sunrise"] = true;
+                filter_sys["sunset"] = true;
+                Serial.print(F("JSON filter: "));
+                Serial.println(filter);
+                ReadLoggingStream loggingStream(http.getStream(), Serial); // prints stream to Serial
+                DeserializationError error = deserializeJson(data, loggingStream, DeserializationOption::Filter(filter));
+                if (error)
+                {
+                    Serial.print(F("deserializeJson() failed: "));
+                    Serial.println(error.f_str());
+                    return;
+                }
+                /*
+                Serial.println(F("JSON data:"));
+                Serial.println(data);
+
+                // shouldn"t use .containsKey() with ArduinoJson 6
+                if (!data.containsKey("sunrise") || !data.containsKey("sunset"))
+                {
+                    Serial.println("Parsing JSON input failed! No sunrise or sunset data");
+                    return;
+                }
+                else
+                {
+                    Serial.println("Deserializing JSON doc successful");
+                }
+                */
+                sunrise = data["sys"]["sunrise"].as<long>(); // unsigned long?
+                Serial.println(F("Sunrise time: ") + String(sunrise));
+                sunset = data["sys"]["sunset"].as<long>(); // unsigned long?
+                Serial.println(F("Sunset time: ") + String(sunset));
             }
             // payload = http.getString();
             // Serial.println(payload);
@@ -80,27 +123,30 @@ void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
         {
             Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(http_response_code).c_str());
         }
-        json_buffer = payload;
+        //json_buffer = payload;
         http.end();
     }
     else
     {
-        Serial.println("[HTTP] Unable to connect");
+        Serial.println(F("[HTTP] Unable to connect"));
         return;
     }
+    /*
     // capacity of OpenWeatherMap API response from ArduinoJson Assistant
     const size_t capacity = JSON_ARRAY_SIZE(3) + 2 * JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(2) + 3 * JSON_OBJECT_SIZE(4) + JSON_OBJECT_SIZE(5) + JSON_OBJECT_SIZE(6) + JSON_OBJECT_SIZE(12) + 480;
     DynamicJsonDocument data(capacity);
     StaticJsonDocument<64> filter;
+    filter["sys"] = true;
     Serial.print("JSON filter: ");
     Serial.println(filter);
-    filter["sys"] = true;
     // StaticJsonDocument<1169> jsonBuffer;
     // JsonObject &data = jsonBuffer.parseObject(json_buffer);
     // deserializeJson(data, json_buffer);
     deserializeJson(data, json_buffer, DeserializationOption::Filter(filter));
-    Serial.println("JSON dta:");
+    Serial.println("JSON data:");
     Serial.println(data);
+    */
+    /*
     if (!data.containsKey("sunrise") || !data.containsKey("sunset"))
     {
         Serial.println("Parsing JSON input failed! No sunrise or sunset data");
@@ -110,6 +156,7 @@ void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
     {
         Serial.println("Deserializing JSON doc successful");
     }
+    */
     /*
     if (!data.success())
     {
@@ -129,10 +176,12 @@ void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
     sunset = (unsigned long) data["sys"]["sunset"];
     Serial.println("Sunset time: " + String(sunset));
     */
-    sunrise = (unsigned long)data["sys"]["sunrise"]; // long?
+    /*
+    sunrise = data["sys"]["sunrise"].as<long>(); // unsigned long?
     Serial.println("Sunrise time: " + String(sunrise));
-    sunset = (unsigned long)data["sys"]["sunset"]; // long?
+    sunset = data["sys"]["sunset"].as<long>(); // unsigned long?
     Serial.println("Sunset time: " + String(sunset));
+    */
 }
 
 #else
@@ -168,7 +217,7 @@ light_state_t get_light_state(light_t &light)
     }
     if (timeout == 0)
     {
-        Serial.println("Light get state timed out: " + String(light.ip_addr));
+        Serial.println(F("Light get state timed out: ") + String(light.ip_addr));
         return OFF;
     }
     if (packet_size)
@@ -178,7 +227,7 @@ light_state_t get_light_state(light_t &light)
         {
             packet_buffer[len] = 0;
         }
-        Serial.println("Packet received:");
+        Serial.println(F("Packet received:"));
         Serial.println(packet_buffer);
 
         const int capacity = JSON_OBJECT_SIZE(3) + JSON_OBJECT_SIZE(7);
@@ -247,9 +296,9 @@ bool wifi_setup()
     Serial.print(F("IP: "));
     Serial.println(WiFi.localIP());
 
-    Serial.print("Signal strength (RSSI):");
+    Serial.print(F("Signal strength (RSSI):"));
     Serial.print(WiFi.RSSI());
-    Serial.println(" dBm");
+    Serial.println(F(" dBm"));
     return true;
 }
 
@@ -263,10 +312,10 @@ bool switch_lights()
         light_state_t current_state = get_light_state(light);
 
         light.changed_state = current_state == OFF ? true : false;
-        Serial.println("Switching light " + String(light.id) + " state to ON");
+        Serial.println(F("Switching light ") + String(light.id) + F(" state to ON"));
         if (!light.changed_state)
         {
-            Serial.println("(light was already ON)");
+            Serial.println(F("(light was already ON)"));
         }
         res = switch_light_state(light, ON);
         /*
@@ -292,7 +341,7 @@ bool switch_lights()
         light_t light = lights[i];
         if (light.changed_state)
         {
-            Serial.println("Switching light " + String(light.id) + " state back to OFF");
+            Serial.println(F("Switching light ") + String(light.id) + F(" state back to OFF"));
             res = switch_light_state(light, OFF);
         }
     }
@@ -303,19 +352,19 @@ bool switch_lights()
 day_time_t check_night_time()
 {
     time_t now = timeClient.getEpochTime();
-    Serial.println("Now time: " + (unsigned long)now);
+    Serial.println(F("Now time: ") + (unsigned long)now);
     time_t sunrise;
     time_t sunset;
     get_sunset_sunrise_time(sunrise, sunset, now);
 
     if (now > sunrise && now < sunset)
     {
-        Serial.println("It's day time");
+        Serial.println(F("It's day time"));
         return DAY;
     }
     else
     {
-        Serial.println("It's night time");
+        Serial.println(F("It's night time"));
         return NIGHT;
     }
 }
@@ -345,10 +394,10 @@ void switch_interrupt()
 {
     if (digitalRead(SWITCH_PIN) == LOW)
     {
-        Serial.println("Switching lights ON");
+        Serial.println(F("Switching lights ON"));
         switch_lights(); // TODO: ON
     } else if (digitalRead(SWITCH_PIN) == HIGH) {
-        Serial.println("Switching lights OFF");
+        Serial.println(F("Switching lights OFF"));
         switch_lights(); // TODO: OFF
     }
 }
@@ -376,5 +425,5 @@ void loop()
     // sould never get here?
     timeClient.update();
     delay(2000);
-    Serial.println("Looping...");
+    Serial.println(F("Looping..."));
 }
