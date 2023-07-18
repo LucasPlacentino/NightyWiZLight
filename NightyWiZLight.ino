@@ -211,12 +211,13 @@ void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
 }
 
 #else
-#include <SolarCalculator>
+#include <SolarCalculator.h>
 void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
 {
     // TODO:
-    double latitude = LATITUDE.toDouble();
+    double latitude = LATITUDE.toDouble(); // toDouble() not working ?
     double longitude = LONGITUDE.toDouble();
+    //? transit?
     calcSunriseSunset(now, latitude, longitude, transit, &sunrise, &sunset);
 }
 #endif
