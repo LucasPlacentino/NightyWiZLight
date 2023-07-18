@@ -54,12 +54,12 @@ const char OWM_URL[] = "https://api.openweathermap.org/data/2.5/weather?units=me
 
 // TODO: debounce ?
 unsigned long now_millis = millis();
-unsigned long btn_last = btn_now;
-int btn_debounce = 200;
-unsigned long pir_last = pir_now;
-int pir_debounce = 200;
-unsigned long switch_last = switch_now;
-int switch_debounce = 200;
+unsigned long btn_last = 0;
+int btn_debounce = 200; // ms
+unsigned long pir_last = 0;
+int pir_debounce = 200; // ms
+unsigned long switch_last = 0;
+int switch_debounce = 200; // ms
 
 WiFiClient client;
 // HTTPClient http; // set only when using OWM
