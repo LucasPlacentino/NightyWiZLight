@@ -304,6 +304,7 @@ bool wifi_setup()
 
 bool switch_lights()
 {
+    swiching_lights = true;
     bool res = false;
 
     for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
@@ -345,7 +346,7 @@ bool switch_lights()
             res = switch_light_state(light, OFF);
         }
     }
-
+    swiching_lights = false;
     return res;
 }
 
@@ -371,23 +372,25 @@ day_time_t check_night_time()
 
 void motion_detected_interrupt()
 {
-    if (!swiching_lights || !(digitalRead(PIR_SWITCH_PIN) == LOW))
-        timeClient.update();
+    if (!swiching_lights || !(digitalRead(PIR_SWITCH_PIN) == LOW)) //TODO: verify second condition
     // prevents the lights from switching again if PIR interrupt during the delay, or if the switch is on
     {
+        timeClient.update();
         day_time_t current_time = check_night_time();
         if (current_time == NIGHT)
         {
-            swiching_lights = true;
             switch_lights();
-            swiching_lights = false;
         }
     }
 }
 
 void btn_interrupt()
 {
-    //TODO: same as motion_detected_interrupt() but without night check
+    //same as motion_detected_interrupt() but without night check
+    if (!swiching_lights)
+    {
+        switch_lights();
+    }
 }
 
 void switch_interrupt()
@@ -395,10 +398,22 @@ void switch_interrupt()
     if (digitalRead(SWITCH_PIN) == LOW)
     {
         Serial.println(F("Switching lights ON"));
-        switch_lights(); // TODO: ON
-    } else if (digitalRead(SWITCH_PIN) == HIGH) {
+        for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
+        {
+            light_t light = lights[i];
+            Serial.println(F("Switching light ") + String(light.id) + F(" state to ON"));
+            switch_light_state(light, ON);
+        }
+    }
+    else if (digitalRead(SWITCH_PIN) == HIGH)
+    {
         Serial.println(F("Switching lights OFF"));
-        switch_lights(); // TODO: OFF
+        for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
+        {
+            light_t light = lights[i];
+            Serial.println(F("Switching light ") + String(light.id) + F(" state to OFF"));
+            switch_light_state(light, OFF);
+        }
     }
 }
 
