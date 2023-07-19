@@ -552,7 +552,7 @@ long loop_now = 0;
 
 void loop()
 {
-    if (digitalRead(PIR_SWITCH_PIN) == HIGH && ) // polling PIR instead of interrupt
+    if (digitalRead(PIR_SWITCH_PIN) == HIGH) // polling PIR instead of interrupt
     {
         pir_motion_handler();
     }
@@ -570,10 +570,10 @@ void loop()
     {
         switch_handler();
     }
-    now = millis();
-    if (now - last > 1000)
+    loop_now = millis();
+    if (loop_now - loop_last > 1000)
     {
-        last = now;
+        loop_last = loop_now;
         timeClient.update();
         Serial.println(F("Looping, polling PIR..."));
     }
