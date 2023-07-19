@@ -27,11 +27,11 @@ extern "C"
 */
 
 //* ------- HERE ---------
-#define DEBUG 1 // comment to disable debug print
+//#define DEBUG 1 // comment to disable debug print
 
 light_t lights[2] = {
-    {0, OFF, false, 38899, LIGHT_0_IP}, // light 0, init state, UDP port, changed_state(leave false), ip address
-    //{1, OFF, false, 38899, LIGHT_1_IP}, // light 1, init state, UDP port, changed_state(leave false), ip address
+    {0, OFF, false, 38899, LIGHT_0_IP}, // light 0, init state, changed_state(leave false), UDP port, ip address
+    //{1, OFF, false, 38899, LIGHT_1_IP}, // light 1, init state, changed_state(leave false), UDP port, ip address
 };
 //! YOU CANNOT USE GPIO 16 BECAUSE INTERRUPTS ARE NOT SUPPORTED FOR THIS PIN
 const int LIGHTUP_TIME = 20;   // seconds
@@ -640,8 +640,11 @@ void loop()
         loop_last = loop_now;
         timeClient.update();
         debug_println(F("loop: Looping, polling PIR..."));
-        lights[0].state = get_light_state(lights[0].id);
-        debug_println(F("Light 0 state: ") + String(lights[0].state));
+        for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
+        {
+            lights[i].state = get_light_state(lights[i].id);
+            debug_println(F("Light ") + String(lights[i].id) + F(" state: ") + String(lights[i].state));
+        }
         day_time = check_night_time();
         debug_println(F("Day/night time: ") + String((day_time == DAY) ? F("DAY") : F("NIGHT")));
     }
