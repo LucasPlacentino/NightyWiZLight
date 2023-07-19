@@ -34,10 +34,10 @@ light_t lights[2] = {
 };
 //! YOU CANNOT USE GPIO 16 BECAUSE INTERRUPTS ARE NOT SUPPORTED FOR THIS PIN
 const int LIGHTUP_TIME = 20;   // seconds
-const int PIR_PIN = 12;        // PIR sensor pin
-const int BTN_PIN = 13;        // button pin
-const int SWITCH_PIN = 14;     // switch pin
-const int PIR_SWITCH_PIN = 15; // PIR disable switch pin
+const int PIR_PIN = 12;        // D6 // PIR sensor pin
+const int BTN_PIN = 13;        // D7 // button pin
+const int SWITCH_PIN = 14;     // D5 // switch pin
+const int PIR_SWITCH_PIN = 15; // D8 // PIR disable switch pin
 
 //* ------- ^^^^ --------
 
@@ -56,10 +56,13 @@ const char OWM_URL[] = "https://api.openweathermap.org/data/2.5/weather?units=me
 unsigned long now_millis = millis();
 unsigned long btn_last = 0;
 int btn_debounce = 200; // ms
+bool btn_flag = false;
 unsigned long pir_last = 0;
 int pir_debounce = 200; // ms
+bool pir_flag = false; // not used
 unsigned long switch_last = 0;
 int switch_debounce = 200; // ms
+bool switch_flag = false;
 
 WiFiClient client;
 // HTTPClient http; // set only when using OWM
@@ -400,10 +403,16 @@ day_time_t check_night_time()
     }
 }
 
-void IRAM_ATTR motion_detected_interrupt()
+void IRAM_ATTR pir_motion_isr() // not used
+{
+    pir_flag = true;
+}
+
+void pir_motion_handler()
 {
     // TODO: debounce?
     delay(10);
+    /*
     if (digitalRead(PIR_SWITCH_PIN) == HIGH)
     // if (!switching_lights && (digitalRead(PIR_SWITCH_PIN) == HIGH) && !motion) // doesn't have to check if switching is finished because can't interrupt during an ISR
     // prevents the lights from switching again if PIR interrupt during the delay, or if the switch is on
@@ -416,19 +425,35 @@ void IRAM_ATTR motion_detected_interrupt()
             switch_lights();
         }
     }
+    */
+
     /*
     else if (motion && (digitalRead(PIR_SWITCH_PIN) == LOW))
     {
         motion = false;
     }
     */
+
+    // motion = true;
+    timeClient.update();
+    day_time_t current_time = check_night_time();
+    if (current_time == NIGHT)
+    {
+        switch_lights();
+    }
+    pir_flag = false; // not used
 }
 
-void IRAM_ATTR btn_interrupt()
+void IRAM_ATTR btn_isr()
+{
+    btn_flag = true;
+}
+
+void btn_handler()
 {
     // TODO: debounce?
     delay(10);
-    // same as motion_detected_interrupt() but without night check
+    // same as pir_motion_handler() but without night check
     switch_lights();
     /*
     if (!switching_lights) // doesn't have to check if switching is finished because can't interrupt during an ISR
@@ -436,9 +461,15 @@ void IRAM_ATTR btn_interrupt()
         switch_lights();
     }
     */
+   btn_flag = false;
 }
 
-void IRAM_ATTR switch_interrupt()
+void IRAM_ATTR switch_isr()
+{
+   switch_flag = true;
+}
+
+void switch_handler()
 {
     // TODO: debounce?
     delay(10);
@@ -476,6 +507,7 @@ void IRAM_ATTR switch_interrupt()
             switch_light_state(light, OFF);
         }
     }
+    switch_flag = false;
 }
 
 void setup()
@@ -495,19 +527,61 @@ void setup()
     Udp.begin(LOCAL_UDP_PORT); // begin in switch_lights() or switch_light_state() instead?
     timeClient.begin();
 
-    attachInterrupt(digitalPinToInterrupt(PIR_PIN), motion_detected_interrupt, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(BTN_PIN), btn_interrupt, FALLING);
-    attachInterrupt(digitalPinToInterrupt(SWITCH_PIN), switch_interrupt, CHANGE);
+    Serial.println(F("Light(s) setup:"));
+    for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
+    {
+        light_t light = lights[i];
+        Serial.println(F("Light ") + String(light.id) + F(" (IP: ") + light.ip_addr + F(") setup."));
+    }
+
+    //attachInterrupt(digitalPinToInterrupt(PIR_PIN), pir_motion_isr, CHANGE); // do polling for PIR sensor instead of interrupt
+    attachInterrupt(digitalPinToInterrupt(BTN_PIN), btn_isr, FALLING);
+    attachInterrupt(digitalPinToInterrupt(SWITCH_PIN), switch_isr, CHANGE);
     Serial.println(F("Attached interrupts"));
 
     Serial.println(F("setup() done"));
+
+    // test:
+    //motion_detected_interrupt();
+    
+    delay(100);
 }
+
+long loop_last = 0;
+long loop_now = 0;
 
 void loop()
 {
+    if (digitalRead(PIR_SWITCH_PIN) == HIGH && ) // polling PIR instead of interrupt
+    {
+        pir_motion_handler();
+    }
+    /*
+    if (pir_flag)
+    {
+        pir_motion_handler();
+    }
+    */
+    if (btn_flag)
+    {
+        btn_handler();
+    }
+    if (switch_flag)
+    {
+        switch_handler();
+    }
+    now = millis();
+    if (now - last > 1000)
+    {
+        last = now;
+        timeClient.update();
+        Serial.println(F("Looping, polling PIR..."));
+    }
+
     // wifi_setup(); // in loop() because we use light sleep
     // TODO: sould or should not get here?
-    timeClient.update();
+    //timeClient.update();
+    //Serial.println("~");
     // Serial.println(F("Sleeping..."));
     // light_sleep(); // enter light sleep mode
     // continues here once woken up
