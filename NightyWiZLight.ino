@@ -239,7 +239,7 @@ light_state_t get_light_state(light_t &light)
     Udp.write(GET_BUFFER);
     Udp.endPacket();
 
-    int packet_size; //= Udp.parsePacket();
+    int packet_size = Udp.parsePacket();
     int timeout = 10;
     while (!packet_size && timeout > 0)
     {
@@ -308,7 +308,7 @@ void packet_flush()
     {
         ;
     }
-    Serial.println("Packets flushed");
+    debug_println("Packets flushed");
 }
 
 bool wifi_setup()
@@ -353,17 +353,19 @@ bool switch_lights()
         light_t light = lights[i];
         light_state_t current_state = get_light_state(light);
 
-        light.changed_state = current_state == OFF ? true : false;
+        //light.changed_state = current_state == OFF ? true : false;
         Serial.println(F("Switching light ") + String(light.id) + F(" state to ON"));
-        if (!light.changed_state)
+        if (current_state == ON)
         {
+            light.changed_state = false;
             Serial.println(F("(light was already ON, will not turn off after)"));
-        }
-        else
+        } else
         {
-            Serial.println(F("Will turn it back off"));
+            light.changed_state = true;
+            res = switch_light_state(light, ON);
+            Serial.println(F("Light ") + String(light.id) + F(" will turn back off"));
         }
-        res = switch_light_state(light, ON);
+        //res = switch_light_state(light, ON);
         /*
         if (current_state == OFF)
         {
@@ -426,6 +428,7 @@ void pir_motion_handler()
     now_millis = millis();
     if (now_millis - pir_last > pir_debounce)
     {
+        Serial.println(F("Motion detected"));
         delay(10);
         /*
         if (digitalRead(PIR_SWITCH_PIN) == HIGH)
@@ -470,6 +473,7 @@ void btn_handler()
     now_millis = millis();
     if (now_millis - btn_last > btn_debounce)
     {
+        Serial.println(F("Button pressed"));
         delay(10);
         // same as pir_motion_handler() but without night check
         switch_lights();
@@ -494,6 +498,7 @@ void switch_handler()
     if (now_millis - switch_last > switch_debounce)
     {
         delay(10);
+        Serial.println(F("Switched"));
         // TODO: ? put logic outside of interrupt func?
         /*
         now_millis = millis();
@@ -598,7 +603,7 @@ void loop()
     {
         loop_last = loop_now;
         timeClient.update();
-        Serial.println(F("Looping, polling PIR..."));
+        debug_println(F("Looping, polling PIR..."));
     }
 
     // wifi_setup(); // in loop() because we use light sleep
