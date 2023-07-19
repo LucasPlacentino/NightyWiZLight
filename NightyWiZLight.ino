@@ -303,6 +303,8 @@ void packet_flush()
 bool wifi_setup()
 {
     WiFi.mode(WIFI_STA);
+    String hostname = "ESP8266-WiZcontroller";
+    WiFi.hostname(hostname.c_str());
     WiFi.begin(WIFI_SSID, WIFI_PASS);
 
     Serial.println(F("Connecting to WiFi"));
