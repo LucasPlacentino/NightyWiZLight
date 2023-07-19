@@ -34,7 +34,7 @@ light_t lights[2] = {
 };
 //! YOU CANNOT USE GPIO 16 BECAUSE INTERRUPTS ARE NOT SUPPORTED FOR THIS PIN
 const int LIGHTUP_TIME = 20;   // seconds
-const int PIR_PIN = 12;        // D6 // PIR sensor pin
+const int PIR_PIN = A0;        // 12=D6 // PIR sensor pin
 const int BTN_PIN = 13;        // D7 // button pin
 const int SWITCH_PIN = 14;     // D5 // switch pin
 const int PIR_SWITCH_PIN = 15; // D8 // PIR disable switch pin
@@ -238,8 +238,8 @@ light_state_t get_light_state(light_t &light)
     Udp.write(GET_BUFFER);
     Udp.endPacket();
 
-    int packet_size = Udp.parsePacket();
-    int timeout = 50;
+    int packet_size; //= Udp.parsePacket();
+    int timeout = 10;
     while (!packet_size && timeout > 0)
     {
         packet_size = Udp.parsePacket();
@@ -276,6 +276,8 @@ light_state_t get_light_state(light_t &light)
 bool switch_light_state(light_t &light, light_state_t new_state)
 {
     WiFiUDP Udp;
+    packet_flush();
+    light.changed_state = true;
     bool res = false;
     IPAddress ip_address;
     ip_address.fromString(light.ip_addr);
@@ -284,11 +286,13 @@ bool switch_light_state(light_t &light, light_state_t new_state)
     {
         Udp.write(ON_BUFFER);
         res = true;
+        Serial.println("Set light to ON");
     }
     else
     {
         Udp.write(OFF_BUFFER);
         res = true;
+        Serial.println("Set light to OFF");
     }
     Udp.endPacket();
     return res;
@@ -301,6 +305,7 @@ void packet_flush()
     {
         ;
     }
+    Serial.println("Packets flushed");
 }
 
 bool wifi_setup()
@@ -377,6 +382,7 @@ bool switch_lights()
         {
             Serial.println(F("Switching light ") + String(light.id) + F(" state back to OFF"));
             res = switch_light_state(light, OFF);
+            light.changed_state = false;
         }
     }
     // switching_lights = false;
@@ -552,7 +558,7 @@ long loop_now = 0;
 
 void loop()
 {
-    if (digitalRead(PIR_SWITCH_PIN) == HIGH) // polling PIR instead of interrupt
+    if (digitalRead(PIR_SWITCH_PIN) == HIGH || analogRead(PIR_SWITCH_PIN) > 850) // polling PIR instead of interrupt
     {
         pir_motion_handler();
     }
@@ -585,6 +591,26 @@ void loop()
     // Serial.println(F("Sleeping..."));
     // light_sleep(); // enter light sleep mode
     // continues here once woken up
+}
+
+void built_in_led(bool state)
+{
+    digitalWrite(LED_BUILTIN, state ? LOW : HIGH);
+}
+
+//TODO: add disablable debug print?
+void debug_print(String str)
+{
+  #ifdef DEBUG
+  Serial.print(str);
+  #endif
+}
+
+void debug_println(String str)
+{
+  #ifdef DEBUG
+  Serial.println(str);
+  #endif
 }
 
 // not used
