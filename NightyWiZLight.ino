@@ -27,10 +27,11 @@ extern "C"
 */
 
 //* ------- HERE ---------
+#define DEBUG 1 // comment to disable debug print
 
 light_t lights[2] = {
-    {0, OFF, 38899, false, LIGHT_0_IP}, // light 0, init state, UDP port, changed_state(leave false), ip address
-    {1, OFF, 38899, false, LIGHT_1_IP}, // light 1, init state, UDP port, changed_state(leave false), ip address
+    {0, OFF, false, 38899, LIGHT_0_IP}, // light 0, init state, UDP port, changed_state(leave false), ip address
+    //{1, OFF, false, 38899, LIGHT_1_IP}, // light 1, init state, UDP port, changed_state(leave false), ip address
 };
 //! YOU CANNOT USE GPIO 16 BECAUSE INTERRUPTS ARE NOT SUPPORTED FOR THIS PIN
 const int LIGHTUP_TIME = 20;   // seconds
@@ -47,11 +48,11 @@ const char ON_BUFFER[] = "{\"method\":\"setPilot\",\"params\":{\"state\": 1}}"; 
 const char OFF_BUFFER[] = "{\"method\":\"setPilot\",\"params\":{\"state\": 0}}"; // packet to turn OFF a light
 char packet_buffer[255];
 
-const char OWM_URL[] = "https://api.openweathermap.org/data/2.5/weather?units=metric&lang=en";
-// day_time_t time = DAY;
+const char OWM_URL[] = "http://api.openweathermap.org/data/2.5/weather?units=metric&lang=en";
+day_time_t day_time = DAY;
 // bool switching_lights = false;
 // bool motion = false;
-const int TIME_CLIENT_UPDATE = 1000;
+const int TIME_CLIENT_UPDATE = 5000; //! DO NOT GO UNDER 1000ms as OWM is rate-limited at 60 calls/min for the free plan
 
 // TODO: debounce ?
 unsigned long now_millis = millis();
@@ -86,22 +87,24 @@ void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
     server_path += LONGITUDE;
     server_path += "&appid=";
     server_path += OWM_API_KEY;
+    Serial.println(F("get_sunset_sunrise_time: server_path = ") + String(server_path));
 
-    Serial.print(F("get_sunset_sunrise_time: [HTTP] begin...\n"));
+    Serial.println(F("get_sunset_sunrise_time: [HTTP] begin..."));
 
     http.useHTTP10(true);                                  // force HTTP/1.0, not 1.1, to be able to get http stream
-    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS); // not necessary ?
+    //http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS); //! DO NOT USE: BREAKS HTTP REQUEST
 
+    Serial.println(F("get_sunset_sunrise_time: server_path.c_str() = ") + String(server_path.c_str()));
     if (http.begin(client, server_path.c_str()))
     { // HTTP
 
-        Serial.print(F("get_sunset_sunrise_time: [HTTP] GET...\n"));
+        Serial.println(F("get_sunset_sunrise_time: [HTTP] GET..."));
         int http_response_code = http.GET();
         // String payload = "{}";
 
         if (http_response_code > 0)
         {
-            Serial.printf("get_sunset_sunrise_time: [HTTP] GET... code: %d\n", http_response_code);
+            Serial.println(F("get_sunset_sunrise_time: [HTTP] GET... code: ") + String(http_response_code));
 
             if (http_response_code == HTTP_CODE_OK || http_response_code == HTTP_CODE_MOVED_PERMANENTLY)
             {
@@ -152,7 +155,7 @@ void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
         }
         else
         {
-            Serial.printf("get_sunset_sunrise_time: [HTTP] GET... failed, error: %s\n", http.errorToString(http_response_code).c_str());
+            Serial.println(F("get_sunset_sunrise_time: [HTTP] GET... failed, error: ") + String(http_response_code) + F(" - ") + http.errorToString(http_response_code).c_str());
         }
         // json_buffer = payload;
         http.end();
@@ -227,20 +230,22 @@ void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
 }
 #endif
 
-light_state_t get_light_state(light_t &light)
+light_state_t get_light_state(int id)
 {
     light_state_t current_state = OFF;
     packet_flush();
 
     IPAddress ip_address;
-    ip_address.fromString(light.ip_addr);
+    ip_address.fromString(lights[id].ip_addr);
+    Serial.println(F("get_light_state: ip_address = ") + ip_address.toString() + F(" _ ") + String(lights[id].ip_addr));
+    Serial.println(F("get_light_state: port = ") + String(lights[id].port));
 
-    Udp.beginPacket(ip_address, light.port);
+    Udp.beginPacket(ip_address, lights[id].port);
     Udp.write(GET_BUFFER);
     Udp.endPacket();
 
     int packet_size = Udp.parsePacket();
-    int timeout = 20;
+    int timeout = 10;
     while (!packet_size && timeout > 0)
     {
         packet_size = Udp.parsePacket();
@@ -249,7 +254,7 @@ light_state_t get_light_state(light_t &light)
     }
     if (timeout == 0)
     {
-        Serial.println(F("get_light_state: Light get state timed out, ip ") + String(light.ip_addr));
+        Serial.println(F("get_light_state: Light get state timed out, ip ") + String(lights[id].ip_addr));
         return OFF;
     }
     if (packet_size)
@@ -259,7 +264,7 @@ light_state_t get_light_state(light_t &light)
         {
             packet_buffer[len] = 0;
         }
-        Serial.println(F("Packet received:"));
+        Serial.println(F("get_light_state: Packet received:"));
         Serial.println(packet_buffer);
 
         const int capacity = JSON_OBJECT_SIZE(3) + JSON_OBJECT_SIZE(7);
@@ -269,21 +274,22 @@ light_state_t get_light_state(light_t &light)
         if (err.code() == DeserializationError::Ok)
         {
             current_state = response["result"]["state"] ? ON : OFF;
+            lights[id].state = response["result"]["state"] ? ON : OFF;
         }
     }
     return current_state;
 }
 
-bool switch_light_state(light_t &light, light_state_t new_state)
+bool switch_light_state(int id, light_state_t new_state)
 {
     WiFiUDP Udp;
     packet_flush();
-    light.changed_state = true;
+    lights[id].changed_state = true;
     bool res = false;
     IPAddress ip_address;
-    ip_address.fromString(light.ip_addr);
+    ip_address.fromString(lights[id].ip_addr);
     built_in_led(true);
-    Udp.beginPacket(ip_address, light.port);
+    Udp.beginPacket(ip_address, lights[id].port);
     if (new_state == ON)
     {
         Udp.write(ON_BUFFER);
@@ -372,10 +378,10 @@ bool switch_lights()
     // --- multiple lights ---
     for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
     {
-        //light_t light = switching_lights[i];
-        light_state_t current_state = get_light_state(lights[i]);
+        //light_state_t current_state = get_light_state(lights[i].id);
+        light_state_t current_state = lights[i].state; // light[0].state is updated regularly inside loop()
 
-        //light.changed_state = current_state == OFF ? true : false;
+        ////light.changed_state = current_state == OFF ? true : false;
         Serial.println(F("switch_lights: Switching light ") + String(lights[i].id) + F(" state to ON"));
         if (current_state == ON)
         {
@@ -384,7 +390,7 @@ bool switch_lights()
         } else
         {
             lights[i].changed_state = true;
-            res = switch_light_state(lights[i], ON);
+            res = switch_light_state(lights[i].id, ON);
             Serial.println(F("switch_lights: Light ") + String(lights[i].id) + F(" will turn back off"));
         }
         Serial.println(F("switch_lights: ") + String(lights[i].changed_state));
@@ -416,7 +422,7 @@ bool switch_lights()
         if (lights[j].changed_state)
         {
             Serial.println(F("switch_lights: Switching light ") + String(lights[j].id) + F(" state back to OFF"));
-            res = switch_light_state(lights[j], OFF);
+            res = switch_light_state(lights[j].id, OFF);
             lights[j].changed_state = false;
         }
     }
@@ -481,8 +487,10 @@ void pir_motion_handler()
         */
 
         // motion = true;
-        timeClient.update();
-        day_time_t current_time = check_night_time();
+
+        //timeClient.update();
+        //day_time_t current_time = check_night_time();
+        day_time_t current_time = day_time; // day_time is updated regularly inside loop()
         if (current_time == NIGHT)
         {
             switch_lights();
@@ -546,9 +554,8 @@ void switch_handler()
             Serial.println(F("switch_handler: Switching lights ON"));
             for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
             {
-                light_t light = lights[i];
-                Serial.println(F("switch_handler: Switching light ") + String(light.id) + F(" state to ON"));
-                switch_light_state(light, ON);
+                Serial.println(F("switch_handler: Switching light ") + String(lights[i].id) + F(" state to ON"));
+                switch_light_state(lights[i].id, ON);
             }
         }
         else if (digitalRead(SWITCH_PIN) == HIGH)
@@ -556,9 +563,8 @@ void switch_handler()
             Serial.println(F("switch_handler: Switching lights OFF"));
             for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
             {
-                light_t light = lights[i];
-                Serial.println(F("switch_handler: Switching light ") + String(light.id) + F(" state to OFF"));
-                switch_light_state(light, OFF);
+                Serial.println(F("switch_handler: Switching light ") + String(lights[i].id) + F(" state to OFF"));
+                switch_light_state(lights[i].id, OFF);
             }
         }
     }
@@ -568,6 +574,7 @@ void switch_handler()
 void setup()
 {
     Serial.begin(115200);
+    Serial.println(F("-----------------------------"));
     Serial.println(F("setup() start"));
     delay(200);
 
@@ -586,8 +593,7 @@ void setup()
     Serial.println(F("Light(s) setup:"));
     for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
     {
-        light_t light = lights[i];
-        Serial.println(F("Light ") + String(light.id) + F(" (IP: ") + String(light.ip_addr) + F(") setup."));
+        Serial.println(F("Light ") + String(lights[i].id) + F(" (IP: ") + String(lights[i].ip_addr) + F(") setup."));
     }
 
     // attachInterrupt(digitalPinToInterrupt(PIR_PIN), pir_motion_isr, CHANGE); // do polling for PIR sensor instead of interrupt
@@ -600,6 +606,7 @@ void setup()
     // test:
     // motion_detected_interrupt();
 
+    Serial.println(F("-----------------------------"));
     delay(100);
 }
 
@@ -634,6 +641,10 @@ void loop()
         loop_last = loop_now;
         timeClient.update();
         debug_println(F("loop: Looping, polling PIR..."));
+        lights[0].state = get_light_state(lights[0].id);
+        debug_println(F("Light 0 state: ") + String(lights[0].state));
+        day_time = check_night_time();
+        debug_println(F("Day/night time: ") + String((day_time == DAY) ? F("DAY") : F("NIGHT")));
     }
 
     // wifi_setup(); // in loop() because we use light sleep
@@ -650,7 +661,7 @@ void built_in_led(bool state)
     digitalWrite(LED_BUILTIN, state ? LOW : HIGH);
 }
 
-// TODO: add disablable debug print?
+// TODO: add disableable debug print?
 void debug_print(String str)
 {
 #ifdef DEBUG
