@@ -6,13 +6,13 @@
 // #include <HTTPClient.h>     // use ESP8266HTTPClient.h instead
 // #include <WifiClient.h>     // use ESP8266WiFi.h instead
 // #include <TimeLib.h>        // not used ?
-#include <ESP8266WiFi.h>       // ESP8266 Wifi
-//#include <ESP8266HTTPClient.h> // HTTP client // inside OWM conditional compile
-#include <WiFiUdp.h>           // UDP communication to WiZ lights
-#include <NTPClient.h>         // get time from NTP server
-#include <time.h>              // for time_t
-#include <ArduinoJson.h>       // for parsing OpenWeatherMap API response
-#include <StreamUtils.h>       // for ReadLoggingStream the http stream
+#include <ESP8266WiFi.h> // ESP8266 Wifi
+// #include <ESP8266HTTPClient.h> // HTTP client // inside OWM conditional compile
+#include <WiFiUdp.h>     // UDP communication to WiZ lights
+#include <NTPClient.h>   // get time from NTP server
+#include <time.h>        // for time_t
+#include <ArduinoJson.h> // for parsing OpenWeatherMap API response
+#include <StreamUtils.h> // for ReadLoggingStream the http stream
 
 /*
 // Required for LIGHT_SLEEP_T delay mode
@@ -51,6 +51,7 @@ const char OWM_URL[] = "https://api.openweathermap.org/data/2.5/weather?units=me
 // day_time_t time = DAY;
 // bool switching_lights = false;
 // bool motion = false;
+const int TIME_CLIENT_UPDATE = 1000;
 
 // TODO: debounce ?
 unsigned long now_millis = millis();
@@ -59,7 +60,7 @@ int btn_debounce = 200; // ms
 bool btn_flag = false;
 unsigned long pir_last = 0;
 int pir_debounce = 200; // ms
-bool pir_flag = false; // not used
+bool pir_flag = false;  // not used
 unsigned long switch_last = 0;
 int switch_debounce = 200; // ms
 bool switch_flag = false;
@@ -281,6 +282,7 @@ bool switch_light_state(light_t &light, light_state_t new_state)
     bool res = false;
     IPAddress ip_address;
     ip_address.fromString(light.ip_addr);
+    built_in_led(true);
     Udp.beginPacket(ip_address, light.port);
     if (new_state == ON)
     {
@@ -295,6 +297,7 @@ bool switch_light_state(light_t &light, light_state_t new_state)
         Serial.println("Set light to OFF");
     }
     Udp.endPacket();
+    built_in_led(false);
     return res;
 }
 
@@ -334,7 +337,7 @@ bool wifi_setup()
     Serial.print(F("IP: "));
     Serial.println(WiFi.localIP());
 
-    Serial.print(F("Signal strength (RSSI):"));
+    Serial.print(F("Signal strength (RSSI): "));
     Serial.print(WiFi.RSSI());
     Serial.println(F(" dBm"));
     return true;
@@ -354,7 +357,11 @@ bool switch_lights()
         Serial.println(F("Switching light ") + String(light.id) + F(" state to ON"));
         if (!light.changed_state)
         {
-            Serial.println(F("(light was already ON)"));
+            Serial.println(F("(light was already ON, will not turn off after)"));
+        }
+        else
+        {
+            Serial.println(F("Will turn it back off"));
         }
         res = switch_light_state(light, ON);
         /*
@@ -372,7 +379,7 @@ bool switch_lights()
         }
         */
     }
-
+    Serial.println(F("Sleeping for ") + String(LIGHTUP_TIME) + F(" seconds"));
     delay(LIGHTUP_TIME * 1000);
 
     for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
@@ -416,13 +423,32 @@ void IRAM_ATTR pir_motion_isr() // not used
 
 void pir_motion_handler()
 {
-    // TODO: debounce?
-    delay(10);
-    /*
-    if (digitalRead(PIR_SWITCH_PIN) == HIGH)
-    // if (!switching_lights && (digitalRead(PIR_SWITCH_PIN) == HIGH) && !motion) // doesn't have to check if switching is finished because can't interrupt during an ISR
-    // prevents the lights from switching again if PIR interrupt during the delay, or if the switch is on
+    now_millis = millis();
+    if (now_millis - pir_last > pir_debounce)
     {
+        delay(10);
+        /*
+        if (digitalRead(PIR_SWITCH_PIN) == HIGH)
+        // if (!switching_lights && (digitalRead(PIR_SWITCH_PIN) == HIGH) && !motion) // doesn't have to check if switching is finished because can't interrupt during an ISR
+        // prevents the lights from switching again if PIR interrupt during the delay, or if the switch is on
+        {
+            // motion = true;
+            timeClient.update();
+            day_time_t current_time = check_night_time();
+            if (current_time == NIGHT)
+            {
+                switch_lights();
+            }
+        }
+        */
+
+        /*
+        else if (motion && (digitalRead(PIR_SWITCH_PIN) == LOW))
+        {
+            motion = false;
+        }
+        */
+
         // motion = true;
         timeClient.update();
         day_time_t current_time = check_night_time();
@@ -430,22 +456,6 @@ void pir_motion_handler()
         {
             switch_lights();
         }
-    }
-    */
-
-    /*
-    else if (motion && (digitalRead(PIR_SWITCH_PIN) == LOW))
-    {
-        motion = false;
-    }
-    */
-
-    // motion = true;
-    timeClient.update();
-    day_time_t current_time = check_night_time();
-    if (current_time == NIGHT)
-    {
-        switch_lights();
     }
     pir_flag = false; // not used
 }
@@ -457,60 +467,66 @@ void IRAM_ATTR btn_isr()
 
 void btn_handler()
 {
-    // TODO: debounce?
-    delay(10);
-    // same as pir_motion_handler() but without night check
-    switch_lights();
-    /*
-    if (!switching_lights) // doesn't have to check if switching is finished because can't interrupt during an ISR
+    now_millis = millis();
+    if (now_millis - btn_last > btn_debounce)
     {
+        delay(10);
+        // same as pir_motion_handler() but without night check
         switch_lights();
+        /*
+        if (!switching_lights) // doesn't have to check if switching is finished because can't interrupt during an ISR
+        {
+            switch_lights();
+        }
+        */
     }
-    */
-   btn_flag = false;
+    btn_flag = false;
 }
 
 void IRAM_ATTR switch_isr()
 {
-   switch_flag = true;
+    switch_flag = true;
 }
 
 void switch_handler()
 {
-    // TODO: debounce?
-    delay(10);
-    // TODO: ? put logic outside of interrupt func?
-    /*
     now_millis = millis();
-    if (now_millis - switch_last < switch_debounce)
+    if (now_millis - switch_last > switch_debounce)
     {
-        return;
-    } else
-    {
-        switch_last = now_millis;
-        switch_interrupted = true;
-        finished = false;
-    }
-    */
-
-    if (digitalRead(SWITCH_PIN) == LOW)
-    {
-        Serial.println(F("Switching lights ON"));
-        for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
+        delay(10);
+        // TODO: ? put logic outside of interrupt func?
+        /*
+        now_millis = millis();
+        if (now_millis - switch_last < switch_debounce)
         {
-            light_t light = lights[i];
-            Serial.println(F("Switching light ") + String(light.id) + F(" state to ON"));
-            switch_light_state(light, ON);
+            return;
+        } else
+        {
+            switch_last = now_millis;
+            switch_interrupted = true;
+            finished = false;
         }
-    }
-    else if (digitalRead(SWITCH_PIN) == HIGH)
-    {
-        Serial.println(F("Switching lights OFF"));
-        for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
+        */
+
+        if (digitalRead(SWITCH_PIN) == LOW)
         {
-            light_t light = lights[i];
-            Serial.println(F("Switching light ") + String(light.id) + F(" state to OFF"));
-            switch_light_state(light, OFF);
+            Serial.println(F("Switching lights ON"));
+            for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
+            {
+                light_t light = lights[i];
+                Serial.println(F("Switching light ") + String(light.id) + F(" state to ON"));
+                switch_light_state(light, ON);
+            }
+        }
+        else if (digitalRead(SWITCH_PIN) == HIGH)
+        {
+            Serial.println(F("Switching lights OFF"));
+            for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
+            {
+                light_t light = lights[i];
+                Serial.println(F("Switching light ") + String(light.id) + F(" state to OFF"));
+                switch_light_state(light, OFF);
+            }
         }
     }
     switch_flag = false;
@@ -525,6 +541,7 @@ void setup()
     pinMode(PIR_PIN, INPUT); // TODO: ? use an hardware pulldown resistor for PIR?
     pinMode(BTN_PIN, INPUT_PULLUP);
     pinMode(LED_BUILTIN, OUTPUT);
+    built_in_led(false);
     pinMode(SWITCH_PIN, INPUT_PULLUP);
     pinMode(PIR_SWITCH_PIN, INPUT_PULLUP);
 
@@ -537,10 +554,10 @@ void setup()
     for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
     {
         light_t light = lights[i];
-        Serial.println(F("Light ") + String(light.id) + F(" (IP: ") + light.ip_addr + F(") setup."));
+        Serial.println(F("Light ") + String(light.id) + F(" (IP: ") + String(light.ip_addr) + F(") setup."));
     }
 
-    //attachInterrupt(digitalPinToInterrupt(PIR_PIN), pir_motion_isr, CHANGE); // do polling for PIR sensor instead of interrupt
+    // attachInterrupt(digitalPinToInterrupt(PIR_PIN), pir_motion_isr, CHANGE); // do polling for PIR sensor instead of interrupt
     attachInterrupt(digitalPinToInterrupt(BTN_PIN), btn_isr, FALLING);
     attachInterrupt(digitalPinToInterrupt(SWITCH_PIN), switch_isr, CHANGE);
     Serial.println(F("Attached interrupts"));
@@ -548,8 +565,8 @@ void setup()
     Serial.println(F("setup() done"));
 
     // test:
-    //motion_detected_interrupt();
-    
+    // motion_detected_interrupt();
+
     delay(100);
 }
 
@@ -577,7 +594,7 @@ void loop()
         switch_handler();
     }
     loop_now = millis();
-    if (loop_now - loop_last > 1000)
+    if (loop_now - loop_last > TIME_CLIENT_UPDATE)
     {
         loop_last = loop_now;
         timeClient.update();
@@ -586,8 +603,8 @@ void loop()
 
     // wifi_setup(); // in loop() because we use light sleep
     // TODO: sould or should not get here?
-    //timeClient.update();
-    //Serial.println("~");
+    // timeClient.update();
+    // Serial.println("~");
     // Serial.println(F("Sleeping..."));
     // light_sleep(); // enter light sleep mode
     // continues here once woken up
@@ -598,19 +615,19 @@ void built_in_led(bool state)
     digitalWrite(LED_BUILTIN, state ? LOW : HIGH);
 }
 
-//TODO: add disablable debug print?
+// TODO: add disablable debug print?
 void debug_print(String str)
 {
-  #ifdef DEBUG
-  Serial.print(str);
-  #endif
+#ifdef DEBUG
+    Serial.print(str);
+#endif
 }
 
 void debug_println(String str)
 {
-  #ifdef DEBUG
-  Serial.println(str);
-  #endif
+#ifdef DEBUG
+    Serial.println(str);
+#endif
 }
 
 // not used
