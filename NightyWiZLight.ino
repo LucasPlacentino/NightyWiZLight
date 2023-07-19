@@ -87,7 +87,7 @@ void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
     server_path += "&appid=";
     server_path += OWM_API_KEY;
 
-    Serial.print(F("[HTTP] begin...\n"));
+    Serial.print(F("get_sunset_sunrise_time: [HTTP] begin...\n"));
 
     http.useHTTP10(true);                                  // force HTTP/1.0, not 1.1, to be able to get http stream
     http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS); // not necessary ?
@@ -95,13 +95,13 @@ void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
     if (http.begin(client, server_path.c_str()))
     { // HTTP
 
-        Serial.print(F("[HTTP] GET...\n"));
+        Serial.print(F("get_sunset_sunrise_time: [HTTP] GET...\n"));
         int http_response_code = http.GET();
         // String payload = "{}";
 
         if (http_response_code > 0)
         {
-            Serial.printf("[HTTP] GET... code: %d\n", http_response_code);
+            Serial.printf("get_sunset_sunrise_time: [HTTP] GET... code: %d\n", http_response_code);
 
             if (http_response_code == HTTP_CODE_OK || http_response_code == HTTP_CODE_MOVED_PERMANENTLY)
             {
@@ -123,7 +123,7 @@ void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
                 DeserializationError error = deserializeJson(data, loggingStream, DeserializationOption::Filter(filter));
                 if (error)
                 {
-                    Serial.print(F("deserializeJson() failed: "));
+                    Serial.print(F("get_sunset_sunrise_time: deserializeJson() failed: "));
                     Serial.println(error.f_str());
                     return;
                 }
@@ -143,23 +143,23 @@ void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
                 }
                 */
                 sunrise = data["sys"]["sunrise"].as<long>(); // unsigned long?
-                Serial.println(F("Sunrise time: ") + String(sunrise));
+                Serial.println(F("get_sunset_sunrise_time: Sunrise time: ") + String(sunrise));
                 sunset = data["sys"]["sunset"].as<long>(); // unsigned long?
-                Serial.println(F("Sunset time: ") + String(sunset));
+                Serial.println(F("get_sunset_sunrise_time: Sunset time: ") + String(sunset));
             }
             // payload = http.getString();
             // Serial.println(payload);
         }
         else
         {
-            Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(http_response_code).c_str());
+            Serial.printf("get_sunset_sunrise_time: [HTTP] GET... failed, error: %s\n", http.errorToString(http_response_code).c_str());
         }
         // json_buffer = payload;
         http.end();
     }
     else
     {
-        Serial.println(F("[HTTP] Unable to connect"));
+        Serial.println(F("get_sunset_sunrise_time: [HTTP] Unable to connect"));
         return;
     }
     /*
@@ -240,7 +240,7 @@ light_state_t get_light_state(light_t &light)
     Udp.endPacket();
 
     int packet_size = Udp.parsePacket();
-    int timeout = 10;
+    int timeout = 20;
     while (!packet_size && timeout > 0)
     {
         packet_size = Udp.parsePacket();
@@ -249,7 +249,7 @@ light_state_t get_light_state(light_t &light)
     }
     if (timeout == 0)
     {
-        Serial.println(F("Light get state timed out: ") + String(light.ip_addr));
+        Serial.println(F("get_light_state: Light get state timed out, ip ") + String(light.ip_addr));
         return OFF;
     }
     if (packet_size)
@@ -288,13 +288,13 @@ bool switch_light_state(light_t &light, light_state_t new_state)
     {
         Udp.write(ON_BUFFER);
         res = true;
-        Serial.println("Set light to ON");
+        Serial.println(F("switch_light_state: Set light to ON"));
     }
     else
     {
         Udp.write(OFF_BUFFER);
         res = true;
-        Serial.println("Set light to OFF");
+        Serial.println(F("switch_light_state: Set light to OFF"));
     }
     Udp.endPacket();
     built_in_led(false);
@@ -308,7 +308,7 @@ void packet_flush()
     {
         ;
     }
-    debug_println("Packets flushed");
+    debug_println(F("packet_flush: Packets flushed"));
 }
 
 bool wifi_setup()
@@ -316,6 +316,7 @@ bool wifi_setup()
     WiFi.mode(WIFI_STA);
     String hostname = "ESP8266-WiZcontroller";
     WiFi.hostname(hostname.c_str());
+    Serial.println(F("WiFi hostname: ") + hostname);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
 
     Serial.println(F("Connecting to WiFi"));
@@ -348,23 +349,45 @@ bool switch_lights()
     // switching_lights = true;
     bool res = false;
 
+    /*
+    // --- single light ---
+    light_state_t current_state = get_light_state(lights[0]);
+    //light.changed_state = current_state == OFF ? true : false;
+    Serial.println(F("Switching light ") + String(lights[0].id) + F(" state to ON"));
+    if (current_state == ON)
+    {
+        lights[0].changed_state = false;
+        Serial.println(F("(light was already ON, will not turn off after)"));
+    } else
+    {
+        lights[0].changed_state = true;
+        res = switch_light_state(lights[0], ON);
+        Serial.println(F("Light ") + String(lights[0].id) + F(" will turn back off"));
+    }
+    Serial.println(lights[0].changed_state);
+    // -----------------------
+    */
+
+    
+    // --- multiple lights ---
     for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
     {
-        light_t light = lights[i];
-        light_state_t current_state = get_light_state(light);
+        //light_t light = switching_lights[i];
+        light_state_t current_state = get_light_state(lights[i]);
 
         //light.changed_state = current_state == OFF ? true : false;
-        Serial.println(F("Switching light ") + String(light.id) + F(" state to ON"));
+        Serial.println(F("switch_lights: Switching light ") + String(lights[i].id) + F(" state to ON"));
         if (current_state == ON)
         {
-            light.changed_state = false;
-            Serial.println(F("(light was already ON, will not turn off after)"));
+            lights[i].changed_state = false;
+            Serial.println(F("switch_lights: (light was already ON, will not turn off after)"));
         } else
         {
-            light.changed_state = true;
-            res = switch_light_state(light, ON);
-            Serial.println(F("Light ") + String(light.id) + F(" will turn back off"));
+            lights[i].changed_state = true;
+            res = switch_light_state(lights[i], ON);
+            Serial.println(F("switch_lights: Light ") + String(lights[i].id) + F(" will turn back off"));
         }
+        Serial.println(F("switch_lights: ") + String(lights[i].changed_state));
         //res = switch_light_state(light, ON);
         /*
         if (current_state == OFF)
@@ -381,39 +404,44 @@ bool switch_lights()
         }
         */
     }
-    Serial.println(F("Sleeping for ") + String(LIGHTUP_TIME) + F(" seconds"));
+    Serial.println(F("switch_lights: Sleeping for ") + String(LIGHTUP_TIME) + F(" seconds"));
     delay(LIGHTUP_TIME * 1000);
 
-    for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
+    
+    for (int j; j < sizeof(lights) / sizeof(lights[0]); j++)
     {
-        light_t light = lights[i];
-        if (light.changed_state)
+        //light_t light = switching_lights[j];
+        Serial.println(F("switch_lights: light") + String(lights[j].id) + String(lights[j].ip_addr) + lights[j].changed_state ? F("changed") : F("not changed"));
+        Serial.println(F("switch_lights: Light power OFF"));
+        if (lights[j].changed_state)
         {
-            Serial.println(F("Switching light ") + String(light.id) + F(" state back to OFF"));
-            res = switch_light_state(light, OFF);
-            light.changed_state = false;
+            Serial.println(F("switch_lights: Switching light ") + String(lights[j].id) + F(" state back to OFF"));
+            res = switch_light_state(lights[j], OFF);
+            lights[j].changed_state = false;
         }
     }
+    
     // switching_lights = false;
+    Serial.println(F("switch_lights: Finished switching lights"));
     return res;
 }
 
 day_time_t check_night_time()
 {
     time_t now = timeClient.getEpochTime();
-    Serial.println(F("Now time: ") + String(now));
+    Serial.println(F("check_night_time: Now time: ") + String(now));
     time_t sunrise;
     time_t sunset;
     get_sunset_sunrise_time(sunrise, sunset, now);
 
     if (now > sunrise && now < sunset)
     {
-        Serial.println(F("It's day time"));
+        Serial.println(F("check_night_time: It's day time"));
         return DAY;
     }
     else
     {
-        Serial.println(F("It's night time"));
+        Serial.println(F("check_night_time: It's night time"));
         return NIGHT;
     }
 }
@@ -428,7 +456,7 @@ void pir_motion_handler()
     now_millis = millis();
     if (now_millis - pir_last > pir_debounce)
     {
-        Serial.println(F("Motion detected"));
+        Serial.println(F("pir_motion_handler: Motion detected"));
         delay(10);
         /*
         if (digitalRead(PIR_SWITCH_PIN) == HIGH)
@@ -473,7 +501,7 @@ void btn_handler()
     now_millis = millis();
     if (now_millis - btn_last > btn_debounce)
     {
-        Serial.println(F("Button pressed"));
+        Serial.println(F("btn_handler: Button pressed"));
         delay(10);
         // same as pir_motion_handler() but without night check
         switch_lights();
@@ -498,7 +526,7 @@ void switch_handler()
     if (now_millis - switch_last > switch_debounce)
     {
         delay(10);
-        Serial.println(F("Switched"));
+        Serial.println(F("switch_handler: Switch activated"));
         // TODO: ? put logic outside of interrupt func?
         /*
         now_millis = millis();
@@ -515,21 +543,21 @@ void switch_handler()
 
         if (digitalRead(SWITCH_PIN) == LOW)
         {
-            Serial.println(F("Switching lights ON"));
+            Serial.println(F("switch_handler: Switching lights ON"));
             for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
             {
                 light_t light = lights[i];
-                Serial.println(F("Switching light ") + String(light.id) + F(" state to ON"));
+                Serial.println(F("switch_handler: Switching light ") + String(light.id) + F(" state to ON"));
                 switch_light_state(light, ON);
             }
         }
         else if (digitalRead(SWITCH_PIN) == HIGH)
         {
-            Serial.println(F("Switching lights OFF"));
+            Serial.println(F("switch_handler: Switching lights OFF"));
             for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
             {
                 light_t light = lights[i];
-                Serial.println(F("Switching light ") + String(light.id) + F(" state to OFF"));
+                Serial.println(F("switch_handler: Switching light ") + String(light.id) + F(" state to OFF"));
                 switch_light_state(light, OFF);
             }
         }
@@ -580,7 +608,9 @@ long loop_now = 0;
 
 void loop()
 {
-    if (digitalRead(PIR_SWITCH_PIN) == HIGH || analogRead(PIR_SWITCH_PIN) > 850) // polling PIR instead of interrupt
+    //Serial.println(analogRead(PIR_PIN));
+    //if (analogRead(PIR_PIN) > 850) // polling PIR instead of interrupt
+    if (digitalRead(PIR_PIN) == HIGH || analogRead(PIR_PIN) > 850) // polling PIR instead of interrupt
     {
         pir_motion_handler();
     }
@@ -603,7 +633,7 @@ void loop()
     {
         loop_last = loop_now;
         timeClient.update();
-        debug_println(F("Looping, polling PIR..."));
+        debug_println(F("loop: Looping, polling PIR..."));
     }
 
     // wifi_setup(); // in loop() because we use light sleep
