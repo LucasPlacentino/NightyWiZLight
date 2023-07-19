@@ -91,8 +91,8 @@ void get_sunset_sunrise_time(time_t &sunrise, time_t &sunset, time_t now)
 
     Serial.println(F("get_sunset_sunrise_time: [HTTP] begin..."));
 
-    http.useHTTP10(true);                                  // force HTTP/1.0, not 1.1, to be able to get http stream
-    //http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS); //! DO NOT USE: BREAKS HTTP REQUEST
+    http.useHTTP10(true); // force HTTP/1.0, not 1.1, to be able to get http stream
+    // http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS); //! DO NOT USE: BREAKS HTTP REQUEST
 
     Serial.println(F("get_sunset_sunrise_time: server_path.c_str() = ") + String(server_path.c_str()));
     if (http.begin(client, server_path.c_str()))
@@ -374,11 +374,10 @@ bool switch_lights()
     // -----------------------
     */
 
-    
     // --- multiple lights ---
     for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
     {
-        //light_state_t current_state = get_light_state(lights[i].id);
+        // light_state_t current_state = get_light_state(lights[i].id);
         light_state_t current_state = lights[i].state; // light[0].state is updated regularly inside loop()
 
         ////light.changed_state = current_state == OFF ? true : false;
@@ -387,14 +386,15 @@ bool switch_lights()
         {
             lights[i].changed_state = false;
             Serial.println(F("switch_lights: (light was already ON, will not turn off after)"));
-        } else
+        }
+        else
         {
             lights[i].changed_state = true;
             res = switch_light_state(lights[i].id, ON);
             Serial.println(F("switch_lights: Light ") + String(lights[i].id) + F(" will turn back off"));
         }
         Serial.println(F("switch_lights: ") + String(lights[i].changed_state));
-        //res = switch_light_state(light, ON);
+        // res = switch_light_state(light, ON);
         /*
         if (current_state == OFF)
         {
@@ -413,10 +413,9 @@ bool switch_lights()
     Serial.println(F("switch_lights: Sleeping for ") + String(LIGHTUP_TIME) + F(" seconds"));
     delay(LIGHTUP_TIME * 1000);
 
-    
     for (int j; j < sizeof(lights) / sizeof(lights[0]); j++)
     {
-        //light_t light = switching_lights[j];
+        // light_t light = switching_lights[j];
         Serial.println(F("switch_lights: light") + String(lights[j].id) + String(lights[j].ip_addr) + lights[j].changed_state ? F("changed") : F("not changed"));
         Serial.println(F("switch_lights: Light power OFF"));
         if (lights[j].changed_state)
@@ -426,7 +425,7 @@ bool switch_lights()
             lights[j].changed_state = false;
         }
     }
-    
+
     // switching_lights = false;
     Serial.println(F("switch_lights: Finished switching lights"));
     return res;
@@ -488,8 +487,8 @@ void pir_motion_handler()
 
         // motion = true;
 
-        //timeClient.update();
-        //day_time_t current_time = check_night_time();
+        // timeClient.update();
+        // day_time_t current_time = check_night_time();
         day_time_t current_time = day_time; // day_time is updated regularly inside loop()
         if (current_time == NIGHT)
         {
@@ -615,8 +614,8 @@ long loop_now = 0;
 
 void loop()
 {
-    //Serial.println(analogRead(PIR_PIN));
-    //if (analogRead(PIR_PIN) > 850) // polling PIR instead of interrupt
+    // Serial.println(analogRead(PIR_PIN));
+    // if (analogRead(PIR_PIN) > 850) // polling PIR instead of interrupt
     if (digitalRead(PIR_PIN) == HIGH || analogRead(PIR_PIN) > 850) // polling PIR instead of interrupt
     {
         pir_motion_handler();
