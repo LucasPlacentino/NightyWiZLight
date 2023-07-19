@@ -1,6 +1,6 @@
 # NightyWiZLight
 ESP8266 Arduino program to turn on WiZ lights when motion is detected only if time is after sunset (and before sunrise)
-> tested with a Wemos D1 mini clone
+> tested with a **Wemos D1 Mini _clone_** and a **WiZ Linear Light**
 
 ## Set up
 ### Set your secrets in a `SECRETS.h` file, using [`SECRETS.h.template`](SECRETS.h.template) as a template:
