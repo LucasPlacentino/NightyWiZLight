@@ -29,8 +29,8 @@ extern "C"
 //* ------- HERE ---------
 
 light_t lights[2] = {
-    {0, OFF, 38899, false, "192.168.0.50"}, // light 0, init state, UDP port, changed_state(leave false), ip address
-    {1, OFF, 38899, false, "192.168.0.51"}, // light 1, init state, UDP port, changed_state(leave false), ip address
+    {0, OFF, 38899, false, LIGHT_0_IP}, // light 0, init state, UDP port, changed_state(leave false), ip address
+    {1, OFF, 38899, false, LIGHT_1_IP}, // light 1, init state, UDP port, changed_state(leave false), ip address
 };
 //! YOU CANNOT USE GPIO 16 BECAUSE INTERRUPTS ARE NOT SUPPORTED FOR THIS PIN
 const int LIGHTUP_TIME = 20;   // seconds
