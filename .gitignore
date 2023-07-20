@@ -1,3 +1,4 @@
 SECRETS.h
 .env
 build/*
+.vscode/c_cpp_properties.json
