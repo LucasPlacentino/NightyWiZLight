@@ -573,14 +573,13 @@ void switch_handler()
 void setup()
 {
     Serial.begin(115200);
-    Serial.println(F("-----------------------------"));
-    Serial.println(F("setup() start"));
+    Serial.println(F("--------------setup() start--------------"));
     delay(200);
 
-    pinMode(PIR_PIN, INPUT); // TODO: ? use an hardware pulldown resistor for PIR?
+    pinMode(PIR_PIN, INPUT); // ? use an hardware pulldown resistor for PIR? not necessary as we use analogRead()>850 (out of 1023) instead of digitalRead()
     pinMode(BTN_PIN, INPUT_PULLUP);
     pinMode(LED_BUILTIN, OUTPUT);
-    built_in_led(false);
+    built_in_led(true);
     pinMode(SWITCH_PIN, INPUT_PULLUP);
     pinMode(PIR_SWITCH_PIN, INPUT_PULLUP);
 
@@ -595,18 +594,28 @@ void setup()
         Serial.println(F("Light ") + String(lights[i].id) + F(" (IP: ") + String(lights[i].ip_addr) + F(") setup."));
     }
 
+    for (int i; i < sizeof(lights) / sizeof(lights[0]); i++)
+    {
+        lights[i].state = get_light_state(lights[i].id);
+        Serial.println(F("Light ") + String(lights[i].id) + F(" state: ") + String(lights[i].state));
+    }
+    day_time = check_night_time();
+    Serial.println(F("Day/night time: ") + String((day_time == DAY) ? F("DAY") : F("NIGHT")));
+
     // attachInterrupt(digitalPinToInterrupt(PIR_PIN), pir_motion_isr, CHANGE); // do polling for PIR sensor instead of interrupt
     attachInterrupt(digitalPinToInterrupt(BTN_PIN), btn_isr, FALLING);
     attachInterrupt(digitalPinToInterrupt(SWITCH_PIN), switch_isr, CHANGE);
     Serial.println(F("Attached interrupts"));
 
-    Serial.println(F("setup() done"));
+    Serial.println(F("--------------setup() done--------------"));
 
     // test:
-    // motion_detected_interrupt();
+    #ifdef DEBUG
+    debug_println(F("=== Test switch lights result: ") + String(switch_lights()) + F(" ===")));
+    #endif
 
-    Serial.println(F("-----------------------------"));
     delay(100);
+    built_in_led(false);
 }
 
 long loop_last = 0;
@@ -614,13 +623,14 @@ long loop_now = 0;
 
 void loop()
 {
-    // Serial.println(analogRead(PIR_PIN));
+    // debug_println(String(analogRead(PIR_PIN)));
+
     // if (analogRead(PIR_PIN) > 850) // polling PIR instead of interrupt
     if (digitalRead(PIR_PIN) == HIGH || analogRead(PIR_PIN) > 850) // polling PIR instead of interrupt
     {
         pir_motion_handler();
     }
-    /*
+    /* // pir interrupt not used, we use polling instead (see above)
     if (pir_flag)
     {
         pir_motion_handler();
@@ -650,12 +660,12 @@ void loop()
     }
 
     // wifi_setup(); // in loop() because we use light sleep
-    // TODO: sould or should not get here?
+    // // sould or should not get here?
     // timeClient.update();
     // Serial.println("~");
     // Serial.println(F("Sleeping..."));
     // light_sleep(); // enter light sleep mode
-    // continues here once woken up
+    // // continues here once woken up
 }
 
 void built_in_led(bool state)
@@ -679,6 +689,7 @@ void debug_println(String str)
 }
 
 // not used
+/*
 #ifdef LIGHT_SLEEP_ENABLED
 void light_sleep()
 {
@@ -693,3 +704,6 @@ void light_sleep()
     wifi_fpm_do_sleep(FPM_SLEEP_MAX_TIME); // Sleep for longest possible time
 }
 #endif
+*/
+
+// EOF
