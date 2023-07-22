@@ -3,11 +3,15 @@ ESP8266 Arduino program to turn on WiZ lights when motion is detected only if ti
 > tested with a **Wemos D1 Mini _clone_** and a **WiZ Linear Light**
 
 ## Set up
+### Allow local communication
+Make sure the **Allow local communication** inside _Settings > Security Settings_ is **enabled** in the WiZ mobile app:
+<img src="https://github.com/LucasPlacentino/NightyWiZLight/assets/23436953/179b8db1-5e81-466d-900a-e9ad7e56a401" width="300">
+
 ### Set your secrets in a `SECRETS.h` file, using [`SECRETS.h.template`](SECRETS.h.template) as a template:
 - **WiFi SSID**
 - **WiFi password**
 - **WiZ Light IP address** (please make a DHCP reservation for your WiZ light on your router, to make sure it has a static LAN IP address)
-- **OpenWeatherMap API key**, to retrieve local sunrise and sunset data
+- **OpenWeatherMap API key**, to retrieve local sunrise and sunset data ([get it from here](https://home.openweathermap.org/api_keys))
 - **Latitude**, used for getting the sunrise and sunset time locally using OpenWeatherMap
 - **Longitude**, used for getting the sunrise and sunset time locally using OpenWeatherMap
 
